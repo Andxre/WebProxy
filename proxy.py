@@ -10,8 +10,10 @@ from pathlib import Path
 # global HashMap which maps URI to file path (Cache)
 # Is Cache Persistent?
 # This could also be a set of URIs, if the URI is in the set that means it exists in the folder and can be accessed at
-# ./cache/{URI}
+# ./cache/{URI} where URI is stripped of all invalid characters (. : / etc.)
 cache = set()
+# Size of message buffer
+BUFF_SIZE = 2048
 
 
 def parse_port():
@@ -33,33 +35,67 @@ def listen(port: int):
     :param port: Integer port number
     :return: None
     """
-    BUFF_SIZE = 1024
     server_socket = socket(AF_INET, SOCK_STREAM)
     server_socket.bind(('', port))
     server_socket.listen(1)
-    print("The server is ready to receive...")
+    print("===== The server is ready to receive... =====")
 
     while True:
         conn_socket, addr = server_socket.accept()
         message = conn_socket.recv(BUFF_SIZE).decode()
-        print(message)
         method, uri, httpVers = parse_request(message)
         if is_cached(uri):
-            # send(conn_socket, getCachedFile(uri))
+            print("===== This file has been found in the cache! =====")
+            body = get_cached_file(uri)
+            conn_socket.send(construct_response(1, 200, body).encode())
+            conn_socket.close()
             continue
         host, port, path = parse_uri(uri)
-        # constructRequest()
-        # resp = send(URL, reqMsg)
-        # cache(resp)
-        conn_socket.send("resp\n".encode())
+        response = request_from_web_server(method, host, path, port)
+        print("===== Response received from server (Writing to cache): =====")
+        print(response)
+
+        status_code = parse_status_code(response)
+        body = parse_response_body(response)
+        if status_code == "200":
+            add_to_cache(uri, body)
+        conn_socket.send(construct_response(0, status_code, body).encode())
         conn_socket.close()
     server_socket.close()
 
 
-def send(conn_socket: socket, msg: str) -> None:
-    conn_socket.send(msg.encode())
+def parse_status_code(response):
+    status_code = response.split('\r\n')[0].split(' ')[1]
+    return status_code
+
+
+def uri_to_key(uri):
+    """
+    Strips URI of invalid characters in filesystem
+    :param uri:
+    :return:
+    """
+    uri = uri.split('://')[1]
+    uri = uri.replace('/', '_')
+    return uri
+
+
+def request_from_web_server(method, host, path, port):
+    """
+    Opens a client socket to the web server and requests using relative URI
+    :return:
+    """
+    client_socket = socket(AF_INET, SOCK_STREAM)
+    client_socket.connect((host, port))
+
+    msg = construct_request(method, host, path)
+    print("===== Sending the following message from proxy to server: ===== ")
     print(msg)
-    return
+    client_socket.send(msg.encode())
+    response = client_socket.recv(BUFF_SIZE).decode()
+    client_socket.close()
+
+    return response
 
 
 def construct_request(method, host, path):
@@ -72,21 +108,38 @@ def construct_request(method, host, path):
     """
     req = f"{method.upper()} {path} HTTP/1.0\r\n" \
           f"Host: {host}\r\n" \
-          f"Connection: close\r\n"
+          f"Connection: close\r\n" \
+          f"\r\n"
 
     return req
 
 
-def construct_response():
-    return
+def construct_response(cache_hit, status_code, body):
+    res = f"HTTP/1.0 {status_code} OK\r\n" \
+          f"Cache-Hit: {cache_hit}\r\n" \
+          f"{body}" \
+          f"\r\n"
+
+    return res
 
 
 def get_cached_file(uri):
-    return
+    path = Path(f'./cache/{uri_to_key(uri)}.html')
+    return path.read_text()
+
+
+def add_to_cache(uri, value):
+    cache.add(uri)
+    filename = uri_to_key(uri) + '.html'
+    path = Path(f'./cache/{filename}')
+    with path.open(mode='w') as f:
+        f.write(value)
+    f.close()
 
 
 def parse_request(msg: str):
     """Parse HTTP message for method, uri, and HTTP Version
+    Throws error if invalid data
 
     :param msg:
     :return: Tuple containing the method, uri, and http version
@@ -94,6 +147,11 @@ def parse_request(msg: str):
     method, uri, httpVers = msg.split(' ')
 
     return method, uri, httpVers
+
+
+def parse_response_body(msg: str):
+    body = msg.split('\r\n\r\n')[1] + '\r\n'
+    return body
 
 
 def parse_uri(uri: str):
@@ -122,5 +180,4 @@ def init_cache():
 
 if __name__ == '__main__':
     init_cache()
-    port = parse_port()
-    listen(port)
+    listen(parse_port())
