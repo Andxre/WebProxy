@@ -7,33 +7,13 @@ from socket import *
 from urllib.parse import urlparse
 from pathlib import Path
 
-# global HashMap which maps URI to file path (Cache)
-# Is Cache Persistent?
-# This could also be a set of URIs, if the URI is in the set that means it exists in the folder and can be accessed at
-# ./cache/{URI} where URI is stripped of all invalid characters (. : / etc.)
-cache = set()
+
 # Size of message buffer
 BUFF_SIZE = 2048
 
 
-def parse_port():
-    """Parses CLI Argument for Port Number"""
-    if len(sys.argv) != 2:
-        sys.exit("Usage: python3 proxy.py {port}")
-    try:
-        port = int(sys.argv[1])
-        if port < 1024 or port > 65535:
-            sys.exit("Port must be between 1024-65535")
-    except ValueError:
-        sys.exit("Invalid Port!")
-    return port
-
-
 def listen(port: int):
-    """Listen for incoming TCP Connections
-
-    :param port: Integer port number
-    :return: None
+    """Listen for and handle incoming TCP Connections
     """
     server_socket = socket(AF_INET, SOCK_STREAM)
     server_socket.bind(('', port))
@@ -42,48 +22,45 @@ def listen(port: int):
 
     while True:
         conn_socket, addr = server_socket.accept()
+        print("Received a client connection from: ", addr)
         message = conn_socket.recv(BUFF_SIZE).decode()
-        method, uri, httpVers = parse_request(message)
+        print("Client message is: ", message)
+
+        try:
+            method, uri = parse_request(message)
+            host, port, path = parse_uri(uri)
+        except ValueError:
+            print("===== An Error has occurred while parsing the client's request... Closing socket! =====")
+            conn_socket.send(construct_response(0, 500, "Internal Server Error").encode())
+            conn_socket.close()
+            continue
+
         if is_cached(uri):
             print("===== This file has been found in the cache! =====")
             body = get_cached_file(uri)
             conn_socket.send(construct_response(1, 200, body).encode())
-            conn_socket.close()
-            continue
-        host, port, path = parse_uri(uri)
-        response = request_from_web_server(method, host, path, port)
-        print("===== Response received from server (Writing to cache): =====")
-        print(response)
+        else:
+            response = request_from_web_server(method, host, path, port)
+            print("===== Response received from server (Writing to cache): =====")
+            print(response)
+            status_code = parse_status_code(response)
+            body = parse_response_body(response)
 
-        status_code = parse_status_code(response)
-        body = parse_response_body(response)
-        if status_code == "200":
-            add_to_cache(uri, body)
-        conn_socket.send(construct_response(0, status_code, body).encode())
+            if status_code == "200":
+                add_to_cache(uri, body)
+            elif status_code != "404":
+                status_code = "500"
+                body = "Internal Server Error"
+
+            conn_socket.send(construct_response(0, status_code, body).encode())
+        print("===== Response has been sent to client! Closing socket... =====")
         conn_socket.close()
     server_socket.close()
 
 
-def parse_status_code(response):
-    status_code = response.split('\r\n')[0].split(' ')[1]
-    return status_code
-
-
-def uri_to_key(uri):
-    """
-    Strips URI of invalid characters in filesystem
-    :param uri:
-    :return:
-    """
-    uri = uri.split('://')[1]
-    uri = uri.replace('/', '_')
-    return uri
-
-
 def request_from_web_server(method, host, path, port):
     """
-    Opens a client socket to the web server and requests using relative URI
-    :return:
+    Opens a client socket to the web server and makes a request using the relative URI
     """
     client_socket = socket(AF_INET, SOCK_STREAM)
     client_socket.connect((host, port))
@@ -99,13 +76,7 @@ def request_from_web_server(method, host, path, port):
 
 
 def construct_request(method, host, path):
-    """Constructs a request message to the host server
-
-    :param method: HTTP Verb (GET)
-    :param host: Host Name
-    :param path: Path
-    :return: Request Message string
-    """
+    """Constructs a request message to the web server """
     req = f"{method.upper()} {path} HTTP/1.0\r\n" \
           f"Host: {host}\r\n" \
           f"Connection: close\r\n" \
@@ -115,6 +86,7 @@ def construct_request(method, host, path):
 
 
 def construct_response(cache_hit, status_code, body):
+    """Constructs  a response message to the client"""
     res = f"HTTP/1.0 {status_code} OK\r\n" \
           f"Cache-Hit: {cache_hit}\r\n" \
           f"{body}" \
@@ -123,30 +95,39 @@ def construct_response(cache_hit, status_code, body):
     return res
 
 
-def get_cached_file(uri):
-    path = Path(f'./cache/{uri_to_key(uri)}.html')
-    return path.read_text()
+def uri_to_key(uri):
+    """
+    Encode URI to a valid filename
+    """
+    uri = uri.split('://')[1]
+    uri = uri.replace('/', '_')
+    return uri
 
 
-def add_to_cache(uri, value):
-    cache.add(uri)
-    filename = uri_to_key(uri) + '.html'
-    path = Path(f'./cache/{filename}')
-    with path.open(mode='w') as f:
-        f.write(value)
-    f.close()
+def parse_port():
+    """Parses CLI Argument for Port Number"""
+    if len(sys.argv) != 2:
+        sys.exit("Usage: python3 proxy.py {port}")
+    try:
+        port = int(sys.argv[1])
+        if port < 1024 or port > 65535:
+            sys.exit("Port must be between 1024-65535")
+    except ValueError:
+        sys.exit("Invalid Port!")
+    return port
+
+
+def parse_status_code(response):
+    status_code = response.split('\r\n')[0].split(' ')[1]
+    return status_code
 
 
 def parse_request(msg: str):
-    """Parse HTTP message for method, uri, and HTTP Version
-    Throws error if invalid data
-
-    :param msg:
-    :return: Tuple containing the method, uri, and http version
-    """
+    """Parse HTTP message for method, uri. Validates method and http version"""
     method, uri, httpVers = msg.split(' ')
-
-    return method, uri, httpVers
+    if method != "GET" or httpVers.strip() != "HTTP/1.0":
+        raise ValueError
+    return method, uri
 
 
 def parse_response_body(msg: str):
@@ -155,24 +136,35 @@ def parse_response_body(msg: str):
 
 
 def parse_uri(uri: str):
-    """Parse URI into host, port, and path
-
-    :param uri:
-    :return: Tuple containing the host, port, and path
-    """
+    """Parse URI into host, port, and path"""
     parsedURL = urlparse(uri)
     host = parsedURL.hostname
     port = parsedURL.port if parsedURL.port else 80
-    path = parsedURL.path
+    path = parsedURL.path if parsedURL.path else '/'
 
     return host, port, path
 
 
 def is_cached(uri: str):
-    return uri in cache
+    """Checks cache folder for encoded URI"""
+    return Path(f'./cache/{uri_to_key(uri)}.html').exists()
+
+
+def get_cached_file(uri):
+    path = Path(f'./cache/{uri_to_key(uri)}.html')
+    return path.read_text()
+
+
+def add_to_cache(uri, value):
+    filename = uri_to_key(uri) + '.html'
+    path = Path(f'./cache/{filename}')
+    with path.open(mode='w', encoding='utf-8') as f:
+        f.write(value)
+    f.close()
 
 
 def init_cache():
+    """Initialize cache, if folder doesn't exist"""
     path = Path('./cache')
     if not path.exists():
         path.mkdir()
