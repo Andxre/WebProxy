@@ -124,8 +124,8 @@ def parse_status_code(response):
 
 def parse_request(msg: str):
     """Parse HTTP message for method, uri. Validates method and http version"""
-    method, uri, httpVers = msg.split(' ')
-    if method != "GET" or httpVers.strip() != "HTTP/1.0":
+    method, uri, http_vers = msg.split(' ')
+    if method != "GET" or http_vers.strip() != "HTTP/1.0":
         raise ValueError
     return method, uri
 
@@ -137,10 +137,10 @@ def parse_response_body(msg: str):
 
 def parse_uri(uri: str):
     """Parse URI into host, port, and path"""
-    parsedURL = urlparse(uri)
-    host = parsedURL.hostname
-    port = parsedURL.port if parsedURL.port else 80
-    path = parsedURL.path if parsedURL.path else '/'
+    parsed_url = urlparse(uri)
+    host = parsed_url.hostname
+    port = parsed_url.port if parsed_url.port else 80
+    path = parsed_url.path if parsed_url.path else '/'
 
     return host, port, path
 
