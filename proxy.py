@@ -41,14 +41,18 @@ def listen(port: int):
             conn_socket.send(construct_response(1, 200, body).encode())
         else:
             response = request_from_web_server(method, host, path, port)
-            print("===== Response received from server (Writing to cache): =====")
+            print("===== Response received from server: =====")
             print(response)
             status_code = parse_status_code(response)
             body = parse_response_body(response)
 
             if status_code == "200":
+                print("===== Status Code is 200 (Writing to cache) =====")
                 add_to_cache(uri, body)
+            elif status_code == "404":
+                print("===== Status Code is 404 (not writing to cache) =====")
             elif status_code != "404":
+                print("===== Status Code is not 200 or 404 (returning error response) =====")
                 status_code = "500"
                 body = "Internal Server Error"
 
