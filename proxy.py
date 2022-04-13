@@ -13,8 +13,7 @@ BUFF_SIZE = 2048
 
 
 def listen(port: int):
-    """Listen for and handle incoming TCP Connections
-    """
+    """Listen for and handle incoming TCP Connections"""
     server_socket = socket(AF_INET, SOCK_STREAM)
     server_socket.bind(('', port))
     server_socket.listen(1)
@@ -64,9 +63,7 @@ def listen(port: int):
 
 
 def request_from_web_server(method, host, path, port):
-    """
-    Opens a client socket to the web server and makes a request using the relative URI
-    """
+    """Opens a client socket to the web server and makes a request using the relative URI"""
     client_socket = socket(AF_INET, SOCK_STREAM)
     client_socket.connect((host, port))
 
@@ -101,9 +98,7 @@ def construct_response(cache_hit, status_code, body):
 
 
 def uri_to_key(uri):
-    """
-    Encode URI to a valid filename
-    """
+    """Encode URI to a valid filename"""
     uri = uri.split('://')[1]
     uri = uri.replace('/', '_')
     return uri
@@ -123,6 +118,7 @@ def parse_port():
 
 
 def parse_status_code(response):
+    """Parses status code from web server response"""
     status_code = response.split('\r\n')[0].split(' ')[1]
     return status_code
 
@@ -138,6 +134,7 @@ def parse_request(msg: str):
 
 
 def parse_response_body(msg: str):
+    """Parses response body from web server response"""
     body = msg.split('\r\n\r\n')[1] + '\r\n'
     return body
 
@@ -160,11 +157,13 @@ def is_cached(uri: str):
 
 
 def get_cached_file(uri):
+    """Finds file in cache folder using key form of URI"""
     path = Path(f'./cache/{uri_to_key(uri)}.html')
     return path.read_text()
 
 
 def add_to_cache(uri, value):
+    """Turns URI into key form (a filename that doesn't contain illegal characters) then saves to cache"""
     filename = uri_to_key(uri) + '.html'
     path = Path(f'./cache/{filename}')
     with path.open(mode='w', encoding='utf-8') as f:
