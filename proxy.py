@@ -107,13 +107,16 @@ def uri_to_key(uri):
 def parse_port():
     """Parses CLI Argument for Port Number"""
     if len(sys.argv) != 2:
-        sys.exit("Usage: python3 proxy.py {port}")
+        print("Usage: python3 proxy.py {port}")
+        return
     try:
         port = int(sys.argv[1])
         if port < 1024 or port > 65535:
-            sys.exit("Port must be between 1024-65535")
+            print("Port must be between 1024-65535")
+            return
     except ValueError:
-        sys.exit("Invalid Port!")
+        print("Invalid Port (Must be an integer between 1024-65535")
+        return
     return port
 
 
@@ -180,4 +183,6 @@ def init_cache():
 
 if __name__ == '__main__':
     init_cache()
-    listen(parse_port())
+    port = parse_port()
+    if port:
+        listen(port)
