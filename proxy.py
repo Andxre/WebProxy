@@ -54,7 +54,7 @@ def listen(port: int):
             elif status_code != "404":
                 print("===== Status Code is not 200 or 404 (returning error response) =====")
                 status_code = "500"
-                body = "Internal Server Error"
+                body = "Internal Server Error\r\n"
 
             conn_socket.send(construct_response(0, status_code, body).encode())
         print("===== Response has been sent to client! Closing socket... =====")
