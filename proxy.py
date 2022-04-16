@@ -21,7 +21,7 @@ def listen(port: int):
 
     while True:
         conn_socket, addr = server_socket.accept()
-        print("Received a client connection from: ", addr)
+        print("\nReceived a client connection from: ", addr)
         message = conn_socket.recv(BUFF_SIZE)
         print("Client message is: ", message)
         message = message.decode()
