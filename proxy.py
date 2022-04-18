@@ -175,10 +175,14 @@ def add_to_cache(uri, value):
 
 
 def init_cache():
-    """Initialize cache, if folder doesn't exist"""
+    """Initialize cache, if folder doesn't exist. If folder exists, clear the folder"""
     path = Path('./cache')
     if not path.exists():
         path.mkdir()
+    else:
+        for item in path.glob('*'):
+            if item.is_file():
+                item.unlink()
 
 
 if __name__ == '__main__':
