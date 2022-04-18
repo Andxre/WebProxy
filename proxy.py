@@ -29,9 +29,10 @@ def listen(port: int):
         try:
             method, uri = parse_request(message)
             host, port, path = parse_uri(uri)
-        except ValueError:
+        except ValueError as err:
             print("===== An Error has occurred while parsing the client's request... Closing socket! =====")
-            conn_socket.send(construct_response(0, 500, "Internal Server Error").encode())
+            print("Error Message: ", err)
+            conn_socket.send(construct_response(0, 500, "Internal Server Error\r\n").encode())
             conn_socket.close()
             continue
 
@@ -54,7 +55,7 @@ def listen(port: int):
             elif status_code != "404":
                 print("===== Status Code is not 200 or 404 (returning error response) =====")
                 status_code = "500"
-                body = "Internal Server Error\r\n"
+                body = "Internal Server Error\r\n\r\n"
 
             conn_socket.send(construct_response(0, status_code, body).encode())
         print("===== Response has been sent to client! Closing socket... =====")
